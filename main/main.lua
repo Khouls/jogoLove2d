@@ -1,6 +1,52 @@
 function love.load()
-	w = love.graphics.getWidth()
-	h = love.graphics.getHeight()
+
+	--cria a função de camera
+	camera = {}
+		camera.x = 0
+		camera.y = 0
+		camera.scaleX = 1
+		camera.scaleY = 1
+		camera.rotation = 0
+
+	function camera:set()
+	  love.graphics.push()
+	  love.graphics.rotate(-self.rotation)
+	  love.graphics.scale(1 / self.scaleX, 1 / self.scaleY)
+	  love.graphics.translate(-self.x, -self.y)
+	end
+
+	function camera:unset()
+	  love.graphics.pop()
+	end
+
+	function camera:move(dx, dy)
+	  self.x = self.x + (dx or 0)
+	  self.y = self.y + (dy or 0)
+	end
+
+	function camera:rotate(dr)
+	  self.rotation = self.rotation + dr
+	end
+
+	function camera:scale(sx, sy)
+	  sx = sx or 1
+	  self.scaleX = self.scaleX * sx
+	  self.scaleY = self.scaleY * (sy or sx)
+	end
+
+	function camera:setPosition(x, y)
+	  self.x = x or self.x
+	  self.y = y or self.y
+	end
+
+	function camera:setScale(sx, sy)
+	  self.scaleX = sx or self.scaleX
+	  self.scaleY = sy or self.scaleY
+	end
+
+
+	w = love.graphics.getWidth() --guarda a largura da tela
+	h = love.graphics.getHeight() --guarda a altura da tela
 
 
 	--cria o mundo
@@ -20,7 +66,8 @@ function love.load()
 		--cria os atributos específicos para as diversas funções
 		player.speed = 5
 
-	terreno = {}
+	terreno = {} --array contendo todos os terrenos
+
 		terreno.chao = {}
 		terreno.chao.body = love.physics.newBody(mundo, w/2, h/2 + 50, "static")
 		terreno.chao.shape = love.physics.newRectangleShape(w, 5)
@@ -50,19 +97,26 @@ end
 function love.keypressed(key)
 	if key == "up" then
 		player.body:applyLinearImpulse(0,-600)
-		print("pulou")
 	end
 
-	 if key == "escape" then love.event.push("quit") end
+	 if key == "escape" then love.event.push("quit") end --fecha o programa se apertar esc
 
 end
 
 function love.draw()
-	love.graphics.polygon("fill", player.body:getWorldPoints(player.shape:getPoints()))
+    camera:set()
 
+    camera:setPosition(player.x, player.y)
+    camera:move(-w/2, -h/2)
+
+
+	--camera:scale(3) -- zoom by 3
+
+	love.graphics.polygon("fill", player.body:getWorldPoints(player.shape:getPoints()))
 
 	for i,v in pairs(terreno) do
 		love.graphics.polygon("fill", v.body:getWorldPoints(v.shape:getPoints()))
 	end
+	camera:unset()
 	
 end
