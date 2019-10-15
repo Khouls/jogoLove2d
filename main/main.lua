@@ -1,19 +1,62 @@
+-- TODO: Fazer o shader em outro arquivo
+local shader_code = [[
+#define NUM_LIGHTS 32
+struct Light {
+    vec2 position;
+    vec3 diffuse;
+    float power;
+};
+extern Light lights[NUM_LIGHTS];
+extern int num_lights;
+extern vec2 screen;
+const float constant = 1.0;
+const float linear = 0.09;
+const float quadratic = 0.032;
+vec4 effect(vec4 color, Image image, vec2 uvs, vec2 screen_coords){
+    vec4 pixel = Texel(image, uvs);
+    vec2 norm_screen = screen_coords / screen;
+    vec3 diffuse = vec3(0);
+    for (int i = 0; i < num_lights; i++) {
+        Light light = lights[i];
+        vec2 norm_pos = light.position / screen;
+        float distance = length(norm_pos - norm_screen) * light.power;
+        float attenuation = 1.0 / (constant + (linear * distance) + (quadratic * (distance * distance)));
+        diffuse += light.diffuse * attenuation;
+    }
+    diffuse = clamp(diffuse, 0.0, 1.0);
+    return pixel * vec4(diffuse, 1.0);
+}
+]]
+
+local shader = nil
+num_lights = 90 --numero máximo de luzes que vão existir no shader
+
+lights = { --array contendo as luzes
+  {0, 0, 1,  30}, --luz do player
+  {300,300,1.1, 10000} --x,y,layer, power
+
+}
+
+
+
+
 function love.load()
+  shader = love.graphics.newShader(shader_code)
 	debugText = "" --texto que vai ser usado pra debugar o código e ver as colisões
-	grav = 500
+	grav = 700
 
 	love.window.setMode(960,640,nil)
 
+
+	w = love.graphics.getWidth() --guarda a largura da tela
+	h = love.graphics.getHeight() --guarda a altura da tela
+
+  lights[1][1], lights[1][2] = w/2, h/2
 
 	math.randomseed(os.time())
 	math.random()
 	math.random()
 	math.random()
-
-	tree = love.graphics.newImage("tree.png")
-	treeW, treeH = tree:getDimensions()
-	img = love.graphics.newImage("maxresdefault.jpg")
-
 
 
 	--cria a função de camera
@@ -69,22 +112,48 @@ function love.load()
 
 		function camera:draw()
 
+      --[[
+      love.graphics.setShader(shader)
+      shader:send("screen", {
+          love.graphics.getWidth(),
+          love.graphics.getHeight()
+      })
+
+      shader:send("num_lights", num_lights)
+
+      for i,v in ipairs(lights) do
+        local strLight = "lights[" .. i-1 .. "]"
+
+        shader:send(strLight .. ".position", {
+            v[1];
+            v[2]
+        })
+
+        shader:send(strLight ..".diffuse", {
+            1.0, 0.6, 0.0
+        })
+
+        shader:send(strLight .. ".power", v[4])
+
+     end
+     --]]
+
 		 local bx, by = self.x, self.y
-		  for _, v in ipairs(self.layers) do
-		    self.x = bx * v.scale
-		    self.y = by * v.scale
-				camera:set()
-				v.draw()
+		  for layer, v in ipairs(self.layers) do
+		    --self.x = bx * v.scale
+		    --self.y = by * v.scale
+
+        camera:set()
+        v.draw()
 				camera:unset()
 
 		  end
+      --love.graphics.setShader()
 
 		end
 
-	--finalização da câmera
 
-	w = love.graphics.getWidth() --guarda a largura da tela
-	h = love.graphics.getHeight() --guarda a altura da tela
+	--finalização da câmera
 
 
 	--cria o mundo
@@ -105,7 +174,7 @@ function love.load()
 		player.y = player.body:getY()
 
 		--cria os atributos específicos para as diversas funções
-		player.speed = 2
+		player.speed = 350
 		player.fallingSpeed = 0
 		player.canDoubleJump = false
 		player.onPlataform = false
@@ -139,39 +208,23 @@ function love.load()
 	end)
 
 	--desenha o fundo
+  bg =  love.graphics.newImage("maxresdefault.jpg")
 	camera:newLayer(0.3, function()
-		love.graphics.setColor(1,1,1,1)
-		love.graphics.draw(img, -100, -100)
-
+    love.graphics.draw(bg, -300, 100)
 	end)
 
-	--desenha as árvores da frente
-	posArvores = {}
-	for i=-600,600,(treeW*0.8+50) do
-		ar = {}
-
-		for j=-1,3 do
-			table.insert(ar,-i)
-		end
-
-		table.insert(posArvores, ar)
-	end
-
-
-	for i,v in ipairs(posArvores) do
-		camera:newLayer(i+0.5, function()
-			for k,v1 in ipairs(v) do
-				love.graphics.draw(tree, v1+500*(k-1), 100, 0, 0.8,0.8)
-			end
-		end)
-	end
+  --desenha o layer 2
+  layer2 = love.graphics.newImage("layer2.png")
+  camera:newLayer(2, function()
+    love.graphics.draw(layer2, -400, -100)
+  end)
 end
 
 
 function love.update(dt)
+  debugText= love.timer.getFPS()
 	--out of bounds
 	if player.y >= 10000 or player.x <= -10000 then
-		print("oof")
 		player.body:setPosition(w/2,h/2)
 	end
 
@@ -183,27 +236,22 @@ function love.update(dt)
 
 	--faz a movimentação
 	player.x, player.y = player.body:getPosition()
-
 	player.xSpeed, player.ySpeed = player.body:getLinearVelocity()
 
-
-	if (not player.onPlataform) then
-		player.body:applyForce(0,grav)
-
-	end
-
+  --anda pra esquerda
 	if love.keyboard.isDown("left") then
-		player.body:setX(player.x - player.speed)
+		player.body:setX(player.x - (player.speed * dt))
 		player.body:setAwake(true)
 	end
 
+  --anda pra direita
 	if love.keyboard.isDown("right") then
-		player.body:setX(player.x + player.speed)
+		player.body:setX(player.x + (player.speed * dt))
 		player.body:setAwake(true)
 	end
+  --faz ele planar
 	if (love.keyboard.isDown("up") and not (player.canDoubleJump) and player.ySpeed > 0) then
 		player.body:setLinearVelocity(player.xSpeed, (player.ySpeed*0.95))
-		debugText = "Subindo"
 	end
 
 end
